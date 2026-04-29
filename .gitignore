@@ -1,0 +1,34 @@
+# Secrets — never commit
+secrets.md
+config.yaml
+*.pem
+*.private-key.pem
+.env
+.env.*
+!.env.example
+
+# Go build output
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Go workspace / module cache (rare in repos)
+go.work
+go.work.sum
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*~
+
+# CLI sample artifact
+sample.diff
+
+# SQLite state (in case someone configures storage.path inside the repo)
+state.db
+state.db-shm
+state.db-wal
