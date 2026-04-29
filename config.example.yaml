@@ -1,0 +1,21 @@
+# Virgil — example configuration.
+#
+# Copy this file to config.yaml and fill in the GitHub App credentials.
+# config.yaml is gitignored; never commit real values.
+
+server:
+  # TCP port the webhook server listens on. /webhook + /healthz.
+  port: 8081
+
+github:
+  # The numeric App ID shown in your GitHub App settings page.
+  app_id: 123456
+
+  # Path to the PEM-encoded private key downloaded when the App was
+  # created. Keep this file out of the repo (the .gitignore already
+  # excludes *.pem).
+  private_key_path: ./virgil-review.private-key.pem
+
+  # The webhook secret configured in the App settings — must match
+  # exactly, or signature verification will reject every delivery.
+  webhook_secret: replace-me-with-the-real-secret

@@ -32,3 +32,4 @@ sample.diff
 state.db
 state.db-shm
 state.db-wal
+.secrets
