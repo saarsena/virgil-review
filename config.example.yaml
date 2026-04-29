@@ -19,3 +19,23 @@ github:
   # The webhook secret configured in the App settings — must match
   # exactly, or signature verification will reject every delivery.
   webhook_secret: replace-me-with-the-real-secret
+
+anthropic:
+  # Anthropic API key. If empty, the server falls back to the
+  # ANTHROPIC_API_KEY environment variable.
+  api_key: ""
+
+  # Model to use for reviews. Defaults to claude-sonnet-4-6 if unset.
+  model: claude-sonnet-4-6
+
+  # Maximum output tokens per review. Defaults to 4096 if unset.
+  max_tokens: 4096
+
+reviewer:
+  # One of: lenient | balanced | strict. Defaults to balanced.
+  strictness: balanced
+
+storage:
+  # SQLite database path. Defaults to ~/.local/share/virgil/state.db
+  # if empty. Parent directory is created on startup.
+  path: ""

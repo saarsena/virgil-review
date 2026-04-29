@@ -20,6 +20,8 @@ import (
 	"github.com/saarsena/virgil-review/internal/webhook"
 	"github.com/saarsena/virgil-review/pkg/config"
 	"github.com/saarsena/virgil-review/pkg/ghclient"
+	"github.com/saarsena/virgil-review/pkg/reviewer"
+	"github.com/saarsena/virgil-review/pkg/storage"
 )
 
 func main() {
@@ -46,8 +48,17 @@ func run() error {
 		return fmt.Errorf("building github factory: %w", err)
 	}
 
+	store, err := storage.Open(cfg.Storage.Path)
+	if err != nil {
+		return fmt.Errorf("opening storage: %w", err)
+	}
+	defer store.Close()
+	logger.Info("storage opened", "path", cfg.Storage.Path)
+
+	rev := reviewer.NewReviewer(*cfg, logger)
+
 	mux := http.NewServeMux()
-	mux.Handle("/webhook", webhook.New(cfg.GitHub.WebhookSecret, factory, logger))
+	mux.Handle("/webhook", webhook.New(cfg.GitHub.WebhookSecret, factory, rev, store, logger))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))

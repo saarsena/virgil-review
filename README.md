@@ -8,20 +8,22 @@ at `.virgil/brain.md`.
 
 ## Status
 
-**Phase 1.** Webhook receiver + stub reviewer + Check Run posting.
-The reviewer returns hardcoded placeholder content; the real
-Anthropic-backed review arrives in Phase 2.
+**Phase 2.** Real Anthropic-backed reviewer, project brain
+(`.virgil/brain.md`), and SQLite-backed idempotency + token usage
+tracking. Reviews fire on pushes to the default branch only; webhook
+retries are deduplicated by `(owner, repo, after_sha)`.
 
 ## Layout
 
 ```
-cmd/server/      virgil-server — the webhook receiver
-cmd/virgil/      virgil — the operator CLI (only `version` in Phase 1)
-pkg/reviewer/    ReviewResult schema, Review() stub, FormatCheckRun()
-pkg/ghclient/    GitHub App auth + Check Run helpers
-pkg/config/      YAML config loader
-pkg/brain/       (stub — Phase 2)
-pkg/classifier/  (stub — Phase 5)
+cmd/server/       virgil-server — the webhook receiver
+cmd/virgil/       virgil — the operator CLI (only `version` in Phase 1)
+pkg/reviewer/     ReviewResult schema, Reviewer + Anthropic call, FormatCheckRun()
+pkg/brain/        Reads .virgil/brain.md from the pushed commit
+pkg/storage/      SQLite-backed idempotency + usage tracking
+pkg/ghclient/     GitHub App auth + Check Run helpers
+pkg/config/       YAML config loader
+pkg/classifier/   (stub — Phase 5)
 internal/webhook/ HMAC verify + push dispatch
 ```
 
@@ -76,32 +78,60 @@ in the GitHub UI within a few seconds.
 go run ./cmd/virgil version
 ```
 
-## What Phase 1 does and doesn't do
+## Project brain
+
+If a repository contains `.virgil/brain.md` at the pushed commit, its
+contents are prepended to the diff with framing instructions before the
+model reads it. Use it for project-specific conventions, intentional
+design choices, and known quirks. The reviewer is told to flag diffs
+that violate brain content.
+
+The file is optional. Missing files are silently skipped. Files larger
+than 32KB are truncated with a warning log.
+
+## Storage
+
+Virgil writes to a SQLite database at `~/.local/share/virgil/state.db`
+(override via `storage.path` in `config.yaml`). Two tables:
+
+- `reviews` — one row per `(owner, repo, after_sha)`; deduplicates
+  webhook retries.
+- `usage` — one row per Anthropic call; tracks token counts per push.
+
+The database is created on first start; schema migrations are
+idempotent.
+
+## What Phase 2 does and doesn't do
 
 Does:
 
 - Verifies `X-Hub-Signature-256` (rejects 401 on mismatch)
-- Handles push events: skips branch creation/deletion, warns on
-  force-push but proceeds, otherwise creates a Check Run on the head
-  SHA and updates it with stub review content
+- Filters pushes to the repository's default branch
+- Deduplicates retries by `(owner, repo, after_sha)`
+- Fetches the unified diff and `.virgil/brain.md` in parallel
+- Calls the Anthropic Messages API with a forced `submit_review` tool
+  to get structured output
+- Posts the result as a "Virgil Review" Check Run
+- Records token usage to SQLite
 - Logs as JSON via `slog`
 
-Doesn't (these are explicit non-goals for Phase 1):
+Doesn't (explicit non-goals for Phase 2):
 
-- Call Anthropic — the reviewer is a stub
-- Read `.virgil/brain.md` — Phase 2
-- Classify changed files — Phase 5
-- Track delivery IDs for idempotency — Phase 4
-- Truncate large diffs — Phase 4
+- Provide a CLI `review` subcommand — Phase 3
+- Truncate large diffs or enforce token budgets — later phase
+- Classify changed files into per-mode prompts (e.g. Godot-aware) — Phase 5
+- Auto-update `.virgil/brain.md` from review output — Phase 4
+- Review non-default branches — later phase
 
-## Branch policy in v1
+## Branch policy
 
 - **Branch deleted:** logged and ignored
-- **Branch created:** logged and ignored (Phase 4 reconsiders)
-- **Force push:** logged at WARN level, review proceeds
-- **Normal push:** review runs
+- **Branch created:** logged and ignored
+- **Non-default branch:** logged and ignored
+- **Force push to default branch:** logged at WARN level, review proceeds
+- **Normal push to default branch:** review runs
 
 ## Contributing
 
-Phase 1 is intentionally narrow. Don't expand its scope here — add new
+Phase 2 is intentionally narrow. Don't expand its scope here — add new
 behavior in subsequent phases.
