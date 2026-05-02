@@ -100,7 +100,7 @@ func Load(path string) (*Config, error) {
 		c.Anthropic.Model = "claude-sonnet-4-6"
 	}
 	if c.Anthropic.MaxTokens == 0 {
-		c.Anthropic.MaxTokens = 4096
+		c.Anthropic.MaxTokens = 16384
 	}
 
 	if c.Reviewer.Strictness == "" {

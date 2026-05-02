@@ -28,8 +28,8 @@ anthropic:
   # Model to use for reviews. Defaults to claude-sonnet-4-6 if unset.
   model: claude-sonnet-4-6
 
-  # Maximum output tokens per review. Defaults to 4096 if unset.
-  max_tokens: 4096
+  # Maximum output tokens per review. Defaults to 16384 if unset.
+  max_tokens: 16384
 
 reviewer:
   # One of: lenient | balanced | strict. Defaults to balanced.
