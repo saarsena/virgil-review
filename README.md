@@ -81,11 +81,32 @@ Build and install with `make install-cli` (drops into `~/.local/bin/virgil`).
 
 ```sh
 virgil version
+virgil review                      # dry-run reviewer on HEAD~1..HEAD
+virgil review <sha>                # dry-run on that commit (vs its parent)
+virgil review <from>..<to>         # dry-run on a range
 virgil brain list                  # pending suggestions across all repos
 virgil brain show <id>             # full text + reason for one suggestion
 virgil brain accept <id>           # append to .virgil/brain.md, mark accepted
 virgil brain reject <id>           # discard
 ```
+
+### `virgil review`
+
+Runs the reviewer locally — no GitHub auth, no Check Run posting, no
+SQLite writes. Useful for "what would Virgil say if I pushed this?"
+before actually pushing. Reads `.virgil/brain.md` from the current
+directory (skip with `--brain ""` if you don't want it considered).
+Brain suggestions are printed but NOT queued — push to have them
+queued for accept/reject.
+
+Output formats: `--format text` (default, terminal-friendly),
+`--format markdown` (pipeable to a renderer), `--format json` (raw,
+suitable for scripting).
+
+Requires `ANTHROPIC_API_KEY` in env (or `--api-key`). Other knobs:
+`--model`, `--strictness`, `--max-tokens`.
+
+### `virgil brain ...`
 
 `brain accept` defaults to writing `.virgil/brain.md` in the current
 directory. Override with `--brain PATH` if you want to inspect output

@@ -30,6 +30,8 @@ func main() {
 		usage()
 	case "brain":
 		runBrain(os.Args[2:])
+	case "review":
+		runReview(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "virgil: unknown command %q\n", os.Args[1])
 		usage()
@@ -42,10 +44,17 @@ func usage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "commands:")
 	fmt.Fprintln(os.Stderr, "  version              print the virgil version")
+	fmt.Fprintln(os.Stderr, "  review [<range>]     run the reviewer locally on a git diff range")
 	fmt.Fprintln(os.Stderr, "  brain list           list pending brain suggestions")
 	fmt.Fprintln(os.Stderr, "  brain show <id>      show a suggestion in full")
 	fmt.Fprintln(os.Stderr, "  brain accept <id>    append suggestion to .virgil/brain.md")
 	fmt.Fprintln(os.Stderr, "  brain reject <id>    discard a pending suggestion")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "review examples:")
+	fmt.Fprintln(os.Stderr, "  virgil review                          # last commit (HEAD~1..HEAD)")
+	fmt.Fprintln(os.Stderr, "  virgil review 4842bd5                  # that commit vs its parent")
+	fmt.Fprintln(os.Stderr, "  virgil review origin/main..HEAD        # range")
+	fmt.Fprintln(os.Stderr, "  virgil review HEAD --format markdown   # markdown output")
 }
 
 func fatalf(format string, args ...any) {
