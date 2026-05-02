@@ -22,6 +22,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/saarsena/virgil-review/pkg/brain"
+	"github.com/saarsena/virgil-review/pkg/difffilter"
 	"github.com/saarsena/virgil-review/pkg/ghclient"
 	"github.com/saarsena/virgil-review/pkg/reviewer"
 	"github.com/saarsena/virgil-review/pkg/storage"
@@ -234,11 +235,39 @@ func (h *Handler) reviewPush(ctx context.Context, log *slog.Logger, owner, repo,
 	if err := g.Wait(); err != nil {
 		return h.failCheckRun(ctx, client, log, owner, repo, runID, err)
 	}
+	rawDiffBytes := len(diff)
+	filtered := difffilter.Filter(diff)
+	diff = filtered.Diff
+	if len(filtered.Dropped) > 0 {
+		log.Info("filtered noise paths from diff",
+			"dropped", filtered.Dropped,
+			"dropped_count", len(filtered.Dropped),
+			"raw_bytes", rawDiffBytes,
+			"filtered_bytes", len(diff),
+		)
+	}
 	log.Info("inputs fetched", "diff_bytes", len(diff), "brain_bytes", len(brainText))
 
 	result, usage, err := h.reviewer.Review(ctx, diff, brainText)
 	if err != nil {
 		return h.failCheckRun(ctx, client, log, owner, repo, runID, fmt.Errorf("reviewer: %w", err))
+	}
+
+	// Persist brain suggestions before formatting so the Check Run text
+	// can render "(id N)" markers the user acts on via `virgil brain`.
+	// A failed insert is logged but does not block the review — the
+	// suggestion just won't be queued for accept/reject.
+	for i := range result.BrainSuggestions {
+		bs := &result.BrainSuggestions[i]
+		id, insErr := h.store.InsertBrainSuggestion(ctx, owner, repo, after, bs.Text, bs.Reason)
+		if insErr != nil {
+			log.Error("insert brain suggestion failed", "error", insErr, "text", bs.Text)
+			continue
+		}
+		bs.ID = id
+	}
+	if n := len(result.BrainSuggestions); n > 0 {
+		log.Info("brain suggestions emitted", "count", n)
 	}
 
 	title, summary, text, annotations := reviewer.FormatCheckRun(result)

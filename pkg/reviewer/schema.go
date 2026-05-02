@@ -8,11 +8,12 @@ package reviewer
 // Concerns surface things worth a human's attention without
 // implying a blocking failure.
 type ReviewResult struct {
-	Summary     string       `json:"summary"`
-	RiskAreas   []string     `json:"risk_areas"`
-	Concerns    []string     `json:"concerns"`
-	Suggestions []string     `json:"suggestions"`
-	Annotations []Annotation `json:"annotations"`
+	Summary          string            `json:"summary"`
+	RiskAreas        []string          `json:"risk_areas"`
+	Concerns         []string          `json:"concerns"`
+	Suggestions      []string          `json:"suggestions"`
+	Annotations      []Annotation      `json:"annotations"`
+	BrainSuggestions []BrainSuggestion `json:"brain_suggestions"`
 }
 
 // Annotation is a file:line specific note attached to a Check Run.
@@ -25,4 +26,17 @@ type Annotation struct {
 	Level     string `json:"level"`
 	Message   string `json:"message"`
 	Title     string `json:"title,omitempty"`
+}
+
+// BrainSuggestion is the model's proposal for a one-line entry to add
+// to the project's .virgil/brain.md file.
+//
+// The model emits Text and Reason. ID is populated by the storage
+// layer after persistence so FormatCheckRun can render an action-able
+// "(id: 7)" alongside each suggestion. The json:"-" on ID keeps the
+// field out of the tool schema the model sees.
+type BrainSuggestion struct {
+	ID     int64  `json:"-"`
+	Text   string `json:"text"`
+	Reason string `json:"reason"`
 }

@@ -1,12 +1,22 @@
-BIN := ./bin/virgil-server
-SRC := ./cmd/server
+SERVER_BIN := ./bin/virgil-server
+CLI_BIN    := ./bin/virgil
 
-.PHONY: build restart logs status stop start tail-smee
+.PHONY: build build-server build-cli install-cli restart logs status stop start tail-smee test
 
-build:
-	go build -o $(BIN) $(SRC)
+build: build-server build-cli
 
-restart: build
+build-server:
+	go build -o $(SERVER_BIN) ./cmd/server
+
+build-cli:
+	go build -o $(CLI_BIN) ./cmd/virgil
+
+# Install the CLI to ~/.local/bin so `virgil` is on PATH.
+install-cli: build-cli
+	install -D $(CLI_BIN) $$HOME/.local/bin/virgil
+	@echo "installed to $$HOME/.local/bin/virgil"
+
+restart: build-server
 	systemctl --user restart virgil-server
 
 start:
@@ -23,3 +33,6 @@ logs:
 
 tail-smee:
 	journalctl --user -u smee-client -f -o cat
+
+test:
+	go test ./...

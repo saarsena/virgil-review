@@ -45,6 +45,20 @@ CREATE TABLE IF NOT EXISTS usage (
 );
 
 CREATE INDEX IF NOT EXISTS idx_usage_occurred_at ON usage(occurred_at);
+
+CREATE TABLE IF NOT EXISTS brain_suggestions (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    suggested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    owner        TEXT NOT NULL,
+    repo         TEXT NOT NULL,
+    after_sha    TEXT NOT NULL,
+    text         TEXT NOT NULL,
+    reason       TEXT NOT NULL DEFAULT '',
+    status       TEXT NOT NULL DEFAULT 'pending',
+    decided_at   TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_brain_suggestions_status ON brain_suggestions(status, owner, repo);
 `
 
 // Open opens the SQLite database at path and runs the idempotent schema

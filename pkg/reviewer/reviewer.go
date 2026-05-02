@@ -112,6 +112,7 @@ func (r *Reviewer) Review(ctx context.Context, diff, brain string) (ReviewResult
 				"concerns",
 				"suggestions",
 				"annotations",
+				"brain_suggestions",
 			},
 		},
 	}
@@ -215,6 +216,24 @@ func reviewToolProperties() map[string]any {
 			"type":        "array",
 			"description": "Optional file:line specific notes. At most a handful per review.",
 			"items":       annotationItem,
+		},
+		"brain_suggestions": map[string]any{
+			"type":        "array",
+			"description": "Optional one-line entries to propose adding to .virgil/brain.md. The user reviews these manually. Empty array preferred — at most 2 per review.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"text": map[string]any{
+						"type":        "string",
+						"description": "A single sentence stating the project convention, design choice, or gotcha. Falsifiable, not vague advice.",
+					},
+					"reason": map[string]any{
+						"type":        "string",
+						"description": "What in the diff or brain triggered this suggestion. One sentence.",
+					},
+				},
+				"required": []string{"text", "reason"},
+			},
 		},
 	}
 }

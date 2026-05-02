@@ -8,10 +8,13 @@ at `.virgil/brain.md`.
 
 ## Status
 
-**Phase 2.** Real Anthropic-backed reviewer, project brain
+**Phase 2+.** Real Anthropic-backed reviewer, project brain
 (`.virgil/brain.md`), and SQLite-backed idempotency + token usage
 tracking. Reviews fire on pushes to the default branch only; webhook
-retries are deduplicated by `(owner, repo, after_sha)`.
+retries are deduplicated by `(owner, repo, after_sha)`. Diff filtering
+strips lockfiles / vendored / generated paths before sending. Reviewer
+can propose brain additions; user accepts/rejects via the `virgil brain`
+CLI.
 
 ## Layout
 
@@ -74,9 +77,21 @@ in the GitHub UI within a few seconds.
 
 ## CLI
 
+Build and install with `make install-cli` (drops into `~/.local/bin/virgil`).
+
 ```sh
-go run ./cmd/virgil version
+virgil version
+virgil brain list                  # pending suggestions across all repos
+virgil brain show <id>             # full text + reason for one suggestion
+virgil brain accept <id>           # append to .virgil/brain.md, mark accepted
+virgil brain reject <id>           # discard
 ```
+
+`brain accept` defaults to writing `.virgil/brain.md` in the current
+directory. Override with `--brain PATH` if you want to inspect output
+before committing it to a repo. The DB defaults to
+`~/.local/share/virgil/state.db`; override with `--db PATH` if you've
+moved it.
 
 ## Project brain
 
@@ -89,39 +104,55 @@ that violate brain content.
 The file is optional. Missing files are silently skipped. Files larger
 than 32KB are truncated with a warning log.
 
+### Brain auto-update
+
+The reviewer may emit `brain_suggestions` in its review output — short
+sentences proposing additions to `.virgil/brain.md` based on what it
+saw in the push. These never apply automatically. Each suggestion is
+queued in SQLite with an id and surfaced in the Check Run with an
+`(id N)` marker. To act on them:
+
+```sh
+virgil brain list                  # see what's pending
+virgil brain show 7                # inspect one
+virgil brain accept 7              # append to .virgil/brain.md
+git add .virgil/brain.md && git commit -m "..."
+```
+
+Rejected suggestions stay in the DB with `status = 'rejected'` for
+audit but are not shown by `brain list` unless you pass
+`--status rejected` (or `--status all`).
+
+## Diff filtering
+
+Before the model sees the diff, sections for noise paths are stripped
+to save tokens and keep the model focused on real changes:
+
+- Lockfiles: `go.sum`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`,
+  `bun.lockb`, `Cargo.lock`, `Pipfile.lock`, `poetry.lock`, `uv.lock`,
+  `composer.lock`, `Gemfile.lock`, `mix.lock`, `Podfile.lock`, `flake.lock`
+- Directory prefixes: `vendor/`, `node_modules/`, `dist/`, `build/`,
+  `target/`, `__pycache__/`, `.next/`, `.nuxt/`, `.svelte-kit/`,
+  `out/`, `.godot/`, `.import/`
+- Generated suffixes: `.pb.go`, `_pb2.py`, `_pb2_grpc.py`,
+  `.min.js`, `.min.css`, `.map`
+
+Filtered paths are logged as `filtered noise paths from diff` so you
+can verify Virgil isn't silently dropping real signal.
+
 ## Storage
 
 Virgil writes to a SQLite database at `~/.local/share/virgil/state.db`
-(override via `storage.path` in `config.yaml`). Two tables:
+(override via `storage.path` in `config.yaml`). Three tables:
 
 - `reviews` — one row per `(owner, repo, after_sha)`; deduplicates
   webhook retries.
 - `usage` — one row per Anthropic call; tracks token counts per push.
+- `brain_suggestions` — queue of model-proposed additions to
+  `.virgil/brain.md`, with status pending/accepted/rejected.
 
 The database is created on first start; schema migrations are
 idempotent.
-
-## What Phase 2 does and doesn't do
-
-Does:
-
-- Verifies `X-Hub-Signature-256` (rejects 401 on mismatch)
-- Filters pushes to the repository's default branch
-- Deduplicates retries by `(owner, repo, after_sha)`
-- Fetches the unified diff and `.virgil/brain.md` in parallel
-- Calls the Anthropic Messages API with a forced `submit_review` tool
-  to get structured output
-- Posts the result as a "Virgil Review" Check Run
-- Records token usage to SQLite
-- Logs as JSON via `slog`
-
-Doesn't (explicit non-goals for Phase 2):
-
-- Provide a CLI `review` subcommand — Phase 3
-- Truncate large diffs or enforce token budgets — later phase
-- Classify changed files into per-mode prompts (e.g. Godot-aware) — Phase 5
-- Auto-update `.virgil/brain.md` from review output — Phase 4
-- Review non-default branches — later phase
 
 ## Branch policy
 

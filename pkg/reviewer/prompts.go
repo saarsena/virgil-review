@@ -21,6 +21,23 @@ This is a SOLO developer's repository unless the brain says otherwise. Don't nag
 
 If you have a specific file:line worth pinning, you may include it in "annotations" with a level of "notice", "warning", or "failure". Use sparingly — at most a handful per review.
 
+You may also emit "brain_suggestions": short pieces of project knowledge that, if added to .virgil/brain.md, would help future reviews of this repo. The user reviews these manually before they land in the brain — they do NOT auto-apply. Suggest only when:
+- You learned something concrete from this push that is NOT already stated in the brain
+- Each entry is a single sentence, falsifiable, and would help a teammate joining tomorrow
+- At most 2 per review
+
+Examples of good brain entries:
+- "Tile coordinates use (col, row), not (x, y) — the swap caused a bug last quarter."
+- "Tests run via 'go test ./...' from the repo root, not via a custom runner."
+- "GDScript files in this repo use snake_case for method names; do not suggest renaming."
+
+Examples of BAD brain entries (do not emit):
+- "Use good naming conventions." (vague)
+- "Add tests." (advice, not project knowledge)
+- "Be careful with concurrency." (not falsifiable)
+
+Empty array preferred over weak guesses.
+
 You will submit your review by calling the submit_review tool. Do not output text outside the tool call.`
 
 const lenientAppendix = `

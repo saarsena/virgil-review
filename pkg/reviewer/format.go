@@ -59,6 +59,9 @@ func formatSummary(r ReviewResult) string {
 		len(r.Suggestions), plural(len(r.Suggestions)),
 		len(r.Annotations), plural(len(r.Annotations)),
 	)
+	if n := len(r.BrainSuggestions); n > 0 {
+		fmt.Fprintf(&b, " · **%d** brain suggestion%s", n, plural(n))
+	}
 	return b.String()
 }
 
@@ -67,10 +70,30 @@ func formatText(r ReviewResult) string {
 	writeSection(&b, "Risk areas", r.RiskAreas)
 	writeSection(&b, "Concerns", r.Concerns)
 	writeSection(&b, "Suggestions", r.Suggestions)
+	writeBrainSuggestions(&b, r.BrainSuggestions)
 	if b.Len() == 0 {
 		return "_Nothing to flag._"
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+func writeBrainSuggestions(b *strings.Builder, items []BrainSuggestion) {
+	if len(items) == 0 {
+		return
+	}
+	b.WriteString("## Brain suggestions\n\n")
+	b.WriteString("_Run `virgil brain accept <id>` to append to `.virgil/brain.md`, or `virgil brain reject <id>` to dismiss._\n\n")
+	for _, item := range items {
+		if item.ID > 0 {
+			fmt.Fprintf(b, "- **(id %d)** %s\n", item.ID, item.Text)
+		} else {
+			fmt.Fprintf(b, "- %s\n", item.Text)
+		}
+		if item.Reason != "" {
+			fmt.Fprintf(b, "  _why: %s_\n", item.Reason)
+		}
+	}
+	b.WriteString("\n")
 }
 
 func writeSection(b *strings.Builder, heading string, items []string) {
