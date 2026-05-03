@@ -54,13 +54,17 @@ var defaultDirPrefixes = []string{
 }
 
 // defaultSuffixes match files whose path ends with one of these.
+// `.map` is intentionally NOT a bare suffix — that would catch any file
+// ending in ".map" (e.g. a real Map.go, sourcemap.go). Scope to the
+// JS/CSS sourcemap forms only.
 var defaultSuffixes = []string{
 	".pb.go",
 	"_pb2.py",
 	"_pb2_grpc.py",
 	".min.js",
 	".min.css",
-	".map",
+	".js.map",
+	".css.map",
 }
 
 // Result is the output of Filter: the cleaned diff and the list of
@@ -111,8 +115,9 @@ func Filter(diff string) Result {
 // pathFromHeader returns the new-side path from a "diff --git" section's
 // first line. The header (without the "diff --git " prefix) looks like
 // "a/<old> b/<new>" for normal cases and "\"a/<old>\" \"b/<new>\"" when
-// either path contains shell-special characters. Returns "" if neither
-// shape matches.
+// either path contains shell-special characters or non-ASCII bytes —
+// git uses C-string quoting with backslash escapes (\", \\, \t, \NNN).
+// Returns "" if neither shape matches.
 func pathFromHeader(section string) string {
 	end := strings.IndexByte(section, '\n')
 	if end < 0 {
@@ -120,22 +125,20 @@ func pathFromHeader(section string) string {
 	}
 	first := section[:end]
 
-	if strings.HasPrefix(first, `"a/`) {
-		// Find closing quote of "a/...".
-		closeA := strings.IndexByte(first[1:], '"')
-		if closeA < 0 {
+	if strings.HasPrefix(first, `"`) {
+		_, after, ok := parseQuotedPath(first)
+		if !ok {
 			return ""
 		}
-		rest := strings.TrimLeft(first[1+closeA+1:], " ")
-		if !strings.HasPrefix(rest, `"b/`) {
+		rest := strings.TrimLeft(first[after:], " ")
+		if !strings.HasPrefix(rest, `"`) {
 			return ""
 		}
-		bPart := rest[3:]
-		closeB := strings.LastIndexByte(bPart, '"')
-		if closeB < 0 {
+		bPath, _, ok := parseQuotedPath(rest)
+		if !ok {
 			return ""
 		}
-		return bPart[:closeB]
+		return strings.TrimPrefix(bPath, "b/")
 	}
 
 	bIdx := strings.Index(first, " b/")
@@ -144,6 +147,68 @@ func pathFromHeader(section string) string {
 	}
 	return first[bIdx+3:]
 }
+
+// parseQuotedPath parses a git C-quoted path starting with '"'. Returns
+// the unescaped contents (still including the leading "a/" or "b/"), the
+// index in s immediately after the closing quote, and ok=true on success.
+// Recognized escapes: \" \\ \a \b \t \n \v \f \r and 3-digit octal \NNN.
+// Unknown escapes are passed through verbatim.
+func parseQuotedPath(s string) (string, int, bool) {
+	if len(s) < 2 || s[0] != '"' {
+		return "", 0, false
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 1; i < len(s); {
+		c := s[i]
+		if c == '"' {
+			return b.String(), i + 1, true
+		}
+		if c != '\\' || i+1 >= len(s) {
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		switch n := s[i+1]; n {
+		case '"', '\\':
+			b.WriteByte(n)
+			i += 2
+		case 'a':
+			b.WriteByte('\a')
+			i += 2
+		case 'b':
+			b.WriteByte('\b')
+			i += 2
+		case 't':
+			b.WriteByte('\t')
+			i += 2
+		case 'n':
+			b.WriteByte('\n')
+			i += 2
+		case 'v':
+			b.WriteByte('\v')
+			i += 2
+		case 'f':
+			b.WriteByte('\f')
+			i += 2
+		case 'r':
+			b.WriteByte('\r')
+			i += 2
+		default:
+			if i+3 < len(s) && isOctal(s[i+1]) && isOctal(s[i+2]) && isOctal(s[i+3]) {
+				v := (int(s[i+1]-'0') << 6) | (int(s[i+2]-'0') << 3) | int(s[i+3]-'0')
+				b.WriteByte(byte(v))
+				i += 4
+			} else {
+				b.WriteByte(c)
+				i++
+			}
+		}
+	}
+	return "", 0, false
+}
+
+func isOctal(c byte) bool { return c >= '0' && c <= '7' }
 
 func shouldFilter(p string) bool {
 	if defaultLockfiles[path.Base(p)] {

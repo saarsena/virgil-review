@@ -100,28 +100,45 @@ func (s *Store) GetBrainSuggestion(ctx context.Context, id int64) (BrainSuggesti
 // DecideBrainSuggestion transitions a pending suggestion to accepted or
 // rejected. Calling on a non-pending suggestion returns an error
 // describing the current status — protects against double-applies.
+//
+// Read + write happen in one transaction so the diagnostic status read
+// can't observe a different state than the one the UPDATE checked.
+// Concurrent decide calls serialize via SQLite's busy_timeout (set on
+// the DSN); the loser sees the winner's commit and reports correctly.
 func (s *Store) DecideBrainSuggestion(ctx context.Context, id int64, status string) error {
 	if status != BrainStatusAccepted && status != BrainStatusRejected {
 		return fmt.Errorf("invalid status %q: must be %q or %q", status, BrainStatusAccepted, BrainStatusRejected)
 	}
-	res, err := s.db.ExecContext(ctx,
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	var current string
+	err = tx.QueryRowContext(ctx,
+		`SELECT status FROM brain_suggestions WHERE id = ?`, id).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrBrainSuggestionNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("get brain suggestion %d: %w", id, err)
+	}
+	if current != BrainStatusPending {
+		return fmt.Errorf("brain suggestion %d already in status %q", id, current)
+	}
+
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE brain_suggestions
 		 SET status = ?, decided_at = CURRENT_TIMESTAMP
-		 WHERE id = ? AND status = ?`,
-		status, id, BrainStatusPending)
-	if err != nil {
+		 WHERE id = ?`,
+		status, id); err != nil {
 		return fmt.Errorf("update brain suggestion %d: %w", id, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		existing, getErr := s.GetBrainSuggestion(ctx, id)
-		if getErr != nil {
-			return getErr
-		}
-		return fmt.Errorf("brain suggestion %d already in status %q", id, existing.Status)
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit brain suggestion %d: %w", id, err)
 	}
 	return nil
 }

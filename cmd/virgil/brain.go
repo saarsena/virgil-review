@@ -261,6 +261,10 @@ func brainReject(args []string) {
 // end of the brain file. Creates the parent directory and the file if
 // they do not yet exist. A leading blank line separates it from any
 // existing content.
+//
+// Uses O_APPEND so a single write atomically lands at end-of-file —
+// concurrent edits by the user can't be clobbered. Worst case under a
+// race is an extra blank line, never lost data.
 func appendToBrain(path, text string) error {
 	if dir := filepath.Dir(path); dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -268,23 +272,34 @@ func appendToBrain(path, text string) error {
 		}
 	}
 
-	existing, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
 		return err
 	}
 
-	var b strings.Builder
-	b.Write(existing)
-	if len(existing) > 0 && !strings.HasSuffix(string(existing), "\n") {
-		b.WriteString("\n")
+	var sep string
+	if info.Size() > 0 {
+		last := make([]byte, 1)
+		if _, err := f.ReadAt(last, info.Size()-1); err != nil {
+			return err
+		}
+		if last[0] == '\n' {
+			sep = "\n"
+		} else {
+			sep = "\n\n"
+		}
 	}
-	if len(existing) > 0 {
-		b.WriteString("\n")
-	}
-	b.WriteString(strings.TrimSpace(text))
-	b.WriteString("\n")
 
-	return os.WriteFile(path, []byte(b.String()), 0o644)
+	if _, err := f.WriteString(sep + strings.TrimSpace(text) + "\n"); err != nil {
+		return err
+	}
+	return nil
 }
 
 func humanAge(t time.Time) string {

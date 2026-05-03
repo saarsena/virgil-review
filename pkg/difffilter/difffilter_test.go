@@ -125,6 +125,52 @@ index abc..def 100644
 	}
 }
 
+func TestFilter_QuotedPathWithEscapes(t *testing.T) {
+	// Git C-quotes paths containing literal '"' as \". The closing
+	// quote of the a/ path must NOT be confused with the embedded \".
+	// We construct a "vendor/" path so it should be filtered.
+	quoted := "diff --git \"a/vendor/has\\\"quote.go\" \"b/vendor/has\\\"quote.go\"\n" +
+		"index abc..def 100644\n" +
+		"--- \"a/vendor/has\\\"quote.go\"\n" +
+		"+++ \"b/vendor/has\\\"quote.go\"\n" +
+		"@@ -1 +1 @@\n" +
+		"-x\n" +
+		"+y\n"
+	r := Filter(quoted)
+	if strings.Contains(r.Diff, "has") {
+		t.Errorf("expected vendor-prefixed quoted path to be dropped, diff = %q", r.Diff)
+	}
+	if len(r.Dropped) != 1 {
+		t.Errorf("Dropped = %v, want 1 entry", r.Dropped)
+	}
+}
+
+func TestFilter_DropsScopedMapSuffix(t *testing.T) {
+	in := joinDiffs(
+		section("static/app.js.map", "+x\n"),
+		section("static/app.css.map", "+y\n"),
+		// A bare ".map" file is NOT a sourcemap — should NOT be dropped.
+		section("internal/Map.go", "+z\n"),
+		section("data/world.map", "+w\n"),
+	)
+	r := Filter(in)
+	if strings.Contains(r.Diff, "app.js.map") {
+		t.Error("expected app.js.map to be dropped")
+	}
+	if strings.Contains(r.Diff, "app.css.map") {
+		t.Error("expected app.css.map to be dropped")
+	}
+	if !strings.Contains(r.Diff, "Map.go") {
+		t.Error("Map.go was wrongly filtered by .map suffix")
+	}
+	if !strings.Contains(r.Diff, "world.map") {
+		t.Error("world.map was wrongly filtered by .map suffix")
+	}
+	if len(r.Dropped) != 2 {
+		t.Errorf("Dropped = %v, want 2 entries", r.Dropped)
+	}
+}
+
 // section produces a single "diff --git" section for path with the given body.
 func section(path, body string) string {
 	return "diff --git a/" + path + " b/" + path + "\n" +
