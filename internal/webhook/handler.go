@@ -248,6 +248,28 @@ func (h *Handler) reviewPush(ctx context.Context, log *slog.Logger, owner, repo,
 	}
 	log.Info("inputs fetched", "diff_bytes", len(diff), "brain_bytes", len(brainText))
 
+	// If the diff is empty after filtering (e.g. push only touched
+	// lockfiles or generated files), don't call Anthropic with empty
+	// content — that returns a 400 and GitHub will retry the delivery.
+	// Post a neutral Check Run explaining what happened and mark the
+	// SHA reviewed so retries stop.
+	if strings.TrimSpace(diff) == "" {
+		log.Info("nothing to review after filtering",
+			"raw_bytes", rawDiffBytes,
+			"dropped_count", len(filtered.Dropped),
+		)
+		title := "Virgil skipped — no reviewable content"
+		summary := emptyDiffSummary(rawDiffBytes, filtered.Dropped)
+		text := emptyDiffText(filtered.Dropped)
+		if err := ghclient.CompleteCheckRun(ctx, client, owner, repo, runID, "neutral", title, summary, text, nil); err != nil {
+			return err
+		}
+		if err := h.store.MarkReviewed(ctx, owner, repo, after, runID); err != nil {
+			log.Error("mark reviewed failed", "error", err)
+		}
+		return nil
+	}
+
 	result, usage, err := h.reviewer.Review(ctx, diff, brainText)
 	if err != nil {
 		return h.failCheckRun(ctx, client, log, owner, repo, runID, fmt.Errorf("reviewer: %w", err))
@@ -303,6 +325,32 @@ func (h *Handler) reviewPush(ctx context.Context, log *slog.Logger, owner, repo,
 	}
 
 	return nil
+}
+
+// emptyDiffSummary builds the one-liner shown in the Check Run summary
+// when the post-filter diff is empty.
+func emptyDiffSummary(rawBytes int, dropped []string) string {
+	if len(dropped) == 0 {
+		return "The push contained no diff content (e.g. merge commit with no changes)."
+	}
+	return fmt.Sprintf("All changed paths (%d) matched diff filter rules — nothing for the reviewer to look at.", len(dropped))
+}
+
+// emptyDiffText renders the Check Run details body. Lists dropped paths
+// so the user can spot a too-aggressive filter rule.
+func emptyDiffText(dropped []string) string {
+	if len(dropped) == 0 {
+		return "No file changes detected in the diff."
+	}
+	var b strings.Builder
+	b.WriteString("Filtered out as noise:\n\n")
+	for _, p := range dropped {
+		b.WriteString("- `")
+		b.WriteString(p)
+		b.WriteString("`\n")
+	}
+	b.WriteString("\nIf any of these should have been reviewed, the filter rule lives in `pkg/difffilter/difffilter.go`.")
+	return b.String()
 }
 
 func (h *Handler) failCheckRun(ctx context.Context, client *github.Client, log *slog.Logger, owner, repo string, runID int64, cause error) error {
