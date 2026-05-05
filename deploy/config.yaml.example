@@ -1,0 +1,10 @@
+server:
+  port: 8081
+
+github:
+  app_id: 3537633
+  private_key_path: /etc/virgil/private-key.pem
+  webhook_secret: REPLACE_WITH_WEBHOOK_SECRET_FROM_APP_SETTINGS
+
+storage:
+  path: /var/lib/virgil/state.db

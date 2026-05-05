@@ -1,0 +1,10 @@
+# Replace virgil.example.com with the hostname you pointed at this VPS.
+# Caddy fetches and renews a Let's Encrypt cert automatically — no extra setup.
+
+virgil.example.com {
+	reverse_proxy localhost:8081
+
+	log {
+		output file /var/log/caddy/virgil.log
+	}
+}

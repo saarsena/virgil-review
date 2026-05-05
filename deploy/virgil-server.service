@@ -1,0 +1,28 @@
+[Unit]
+Description=Virgil GitHub App webhook receiver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=virgil
+Group=virgil
+WorkingDirectory=/var/lib/virgil
+EnvironmentFile=/etc/virgil/env
+ExecStart=/usr/local/bin/virgil-server -config /etc/virgil/config.yaml
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/virgil
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target
